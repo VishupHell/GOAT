@@ -115,11 +115,38 @@
 
 ## 10. Локальный запуск
 
-*Заполните после появления запускаемой основы, обязательно к EK1. Если инструкция уже есть в README или другом существующем файле, дайте прямую ссылку вместо дублирования.*
+**Требования к окружению:** Docker и Docker Compose v2 (например, Docker Desktop), свободный порт 8000. Python и Postgres локально не нужны: всё запускается в контейнерах.
 
-**Требования к окружению:**  
-**Команды установки и запуска:**  
-**Команда или запрос для проверки:**  
+**Команды установки и запуска** (из корня репозитория):
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+При старте контейнер `api` применяет миграции БД (`flask db upgrade` в `run.sh`) и запускает сервер на `http://localhost:8000`. Остановка: `docker compose down` (данные сохраняются в volume `pgdata`; `docker compose down -v` удаляет их).
+
+**Команда или запрос для проверки:**
+
+```bash
+curl http://localhost:8000/health
+```
+
 **Ожидаемый результат:**
 
-*Это подтверждение запуска, а не доказательство выполнения всех требований безопасности.*
+```json
+{"status":"ok","db":"ok"}
+```
+
+Описание всех endpoints и возможность вызвать их из браузера: Swagger UI по адресу `http://localhost:8000/docs` (спецификация — `app/docs/openapi.yaml`).
+
+Пример основного сценария через API:
+
+```bash
+curl -X POST localhost:8000/users -H 'Content-Type: application/json' -d '{"username":"alice"}'
+curl -X POST localhost:8000/users -H 'Content-Type: application/json' -d '{"username":"bob"}'
+curl -X POST localhost:8000/teams -H 'Content-Type: application/json' -d '{"name":"X","admin_id":1}'
+curl -X POST localhost:8000/teams/1/members -H 'Content-Type: application/json' -d '{"user_id":2}'
+curl -X POST localhost:8000/teams/1/tasks -H 'Content-Type: application/json' -d '{"title":"Задача Y","author_id":1,"assignee_id":2}'
+curl -X PATCH localhost:8000/tasks/1/status -H 'Content-Type: application/json' -d '{"user_id":2,"status":"in_progress"}'
+```

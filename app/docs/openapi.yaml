@@ -1,0 +1,291 @@
+openapi: 3.0.3
+info:
+  title: КоЗа API
+  version: 0.1.0
+  description: |
+    Минимальная версия API управления командными задачами.
+
+    Аутентификации пока нет: пользователь, выполняющий действие, передаётся
+    в теле запроса (`author_id`, `user_id`) и никак не проверяется.
+servers:
+  - url: /
+tags:
+  - name: service
+  - name: users
+  - name: teams
+  - name: tasks
+
+paths:
+  /health:
+    get:
+      tags: [service]
+      summary: Проверка работоспособности приложения и БД
+      responses:
+        "200":
+          description: Приложение и БД доступны
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  db: { type: string, example: ok }
+
+  /users:
+    get:
+      tags: [users]
+      summary: Список пользователей
+      responses:
+        "200":
+          description: Все пользователи
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+    post:
+      tags: [users]
+      summary: Создать пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: { type: string, example: alice }
+      responses:
+        "201":
+          description: Пользователь создан
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /teams:
+    post:
+      tags: [teams]
+      summary: Создать команду
+      description: Пользователь `admin_id` становится администратором и первым участником команды.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, admin_id]
+              properties:
+                name: { type: string, example: Backend }
+                admin_id: { type: integer, example: 1 }
+      responses:
+        "201":
+          description: Команда создана
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Team" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /teams/{team_id}:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    get:
+      tags: [teams]
+      summary: Команда и её состав
+      responses:
+        "200":
+          description: Команда
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Team" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /teams/{team_id}/members:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    post:
+      tags: [teams]
+      summary: Добавить участника в команду
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: integer, example: 2 }
+      responses:
+        "201":
+          description: Участник добавлен, возвращается обновлённая команда
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Team" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /teams/{team_id}/tasks:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    get:
+      tags: [tasks]
+      summary: Задачи команды
+      responses:
+        "200":
+          description: Список задач
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [tasks]
+      summary: Создать задачу
+      description: Исполнитель, если указан, должен быть участником команды.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, author_id]
+              properties:
+                title: { type: string, example: Починить вход }
+                description: { type: string, example: Падает при пустом пароле }
+                author_id: { type: integer, example: 1 }
+                assignee_id: { type: integer, nullable: true, example: 2 }
+      responses:
+        "201":
+          description: Задача создана
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{task_id}:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      tags: [tasks]
+      summary: Детали задачи
+      responses:
+        "200":
+          description: Задача
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{task_id}/assignee:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    patch:
+      tags: [tasks]
+      summary: Назначить исполнителя
+      description: Исполнитель должен быть участником команды задачи.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignee_id]
+              properties:
+                assignee_id: { type: integer, example: 2 }
+      responses:
+        "200":
+          description: Исполнитель назначен
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tasks/{task_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    patch:
+      tags: [tasks]
+      summary: Сменить статус задачи
+      description: Статус может менять только назначенный исполнитель (`user_id` равен `assignee_id`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, status]
+              properties:
+                user_id: { type: integer, example: 2 }
+                status: { $ref: "#/components/schemas/TaskStatus" }
+      responses:
+        "200":
+          description: Статус изменён
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  parameters:
+    TeamId:
+      name: team_id
+      in: path
+      required: true
+      schema: { type: integer }
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema: { type: integer }
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        username: { type: string, example: alice }
+    Team:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: Backend }
+        admin_id: { type: integer, example: 1 }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+    TaskStatus:
+      type: string
+      enum: [new, in_progress, done]
+    Task:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        team_id: { type: integer, example: 1 }
+        author_id: { type: integer, example: 1 }
+        assignee_id: { type: integer, nullable: true, example: 2 }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос или нарушено правило предметной области
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Объект не найден
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
